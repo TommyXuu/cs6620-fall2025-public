@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: Docker Build, Push, and Deploy
 
 on:
   push:
@@ -38,3 +38,41 @@ jobs:
             build.run_id=${{ github.run_id }}
             build.run_number=${{ github.run_number }}
 
+  deploy:
+    name: Deploy to EC2 via SSM
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials (Learner Lab)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy latest image on EC2 (SSM Run Command)
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/cs6620-app:latest"
+          CONTAINER="cs6620-app"
+
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Auto-deploy latest Docker image via GitHub Actions + AWS SSM" \
+            --parameters commands="[
+              \"set -e\",
+              \"echo ===== DEPLOY START =====\",
+              \"echo Image: $IMAGE\",
+              \"date\",
+              \"docker pull $IMAGE\",
+              \"docker stop $CONTAINER || true\",
+              \"docker rm $CONTAINER || true\",
+              \"docker run -d --name $CONTAINER -p 80:5000 --restart unless-stopped $IMAGE\",
+              \"echo ===== RUNNING CONTAINERS =====\",
+              \"docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'\"
+            ]"
+
+      - name: Verification note
+        run: echo "SSM command submitted. Verify status in Systems Manager -> Run Command."
