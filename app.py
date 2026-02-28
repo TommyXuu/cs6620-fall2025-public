@@ -6,8 +6,11 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 from flask_cors import CORS
 from pydub import AudioSegment
 import tempfile
+from datetime import datetime
 
 app = Flask(__name__)
+APP_VERSION = "2.0"
+DEPLOYMENT_METHOD = "GitHub Actions + AWS SSM"
 CORS(app)
 
 # Global variables for playlist management
@@ -89,6 +92,15 @@ def parse_log_content(log_content):
         data[filename].append(segment)
     return data
 
+@app.route('/health')
+def health():
+    return jsonify({
+        "status": "healthy",
+        "version": APP_VERSION,
+        "deployment_method": "automated",
+        "timestamp": datetime.now().isoformat()
+    })
+    
 @app.route('/audio_files/<path:filename>')
 def serve_audio_file(filename):
     """
@@ -141,10 +153,22 @@ def serve_audio_segment():
 
 @app.route('/')
 def index():
+    build_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return f"""
+    <h1>Hello from Automated CI/CD Pipeline!</h1>
+    <p><strong>Version:</strong> {APP_VERSION} - Automated Deployment</p>
+    <p><strong>Deployed via:</strong> {DEPLOYMENT_METHOD}</p>
+    <p><strong>Build Date:</strong> {build_time}</p>
+    <p><strong>Assignment:</strong> Automated EC2 Deployment</p>
+
+    <hr/>
+    <p>Open the app pages:</p>
+    <ul>
+      <li><a href="/labeling">Labeling UI</a></li>
+      <li><a href="/status">Status (JSON)</a></li>
+      <li><a href="/health">Health (JSON)</a></li>
+    </ul>
     """
-    Renders the main HTML page for the client-side audio player.
-    """
-    return render_template('index.html') 
 
 @app.route('/select_directory', methods=['POST'])
 def select_directory():
@@ -569,6 +593,7 @@ def auto_load_data():
 
 
 if __name__ == '__main__':
-    # Auto-load CSV and audio files on startup
     auto_load_data()
-    app.run(debug=True, host='0.0.0.0', port=3000)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(debug=False, host='0.0.0.0', port=port)
+
